@@ -5,6 +5,10 @@ import os
 
 app = Flask(__name__)
 
+@app.route('/')
+def index():
+    return "Welcome to DeepSeek Server!"
+
 @app.route('/run-python', methods=['POST'])
 def run_python():
     # 获取来自甲服务器的 JSON 数据
