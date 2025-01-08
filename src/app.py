@@ -13,9 +13,11 @@ def index():
 def run_python():
     # 获取来自甲服务器的 JSON 数据
     data = request.json
+    print(f"Received data: {data}")  # 添加调试日志
 
     # 检查输入数据是否包含必要的字段
     if 'messages' not in data:
+        print("Missing 'messages' field")  # 添加调试日志
         return jsonify({'error': 'Missing "messages" field in request'}), 400
 
     try:
@@ -27,18 +29,22 @@ def run_python():
         # 调用 deepseek_script.py，并将 messages 数据传递给它
         result = subprocess.run(
             ['python3', script_path, json.dumps(data['messages'])],
-            capture_output=True, text=True
+            capture_output=True, text=True,
+            env=os.environ  # 传递当前环境变量
         )
+        print(f"Subprocess stderr: {result.stderr}")  # 打印标准错误
 
         # 检查脚本是否成功运行
+        print(f"Subprocess stdout: {result.stdout}")  # 添加调试日志
+        print(f"Subprocess stderr: {result.stderr}")  # 添加调试日志
+        print(f"Subprocess return code: {result.returncode}")  # 添加调试日志
+        print(f"Full subprocess output: {result}")  # 打印完整子进程对象
+        
         if result.returncode != 0:
             return jsonify({'error': result.stderr}), 500
 
-        # 解析脚本的输出
-        output = json.loads(result.stdout)
-
-        # 返回处理后的结果
-        return jsonify({'output': output})
+        # 直接返回脚本的输出
+        return jsonify({'output': result.stdout})
 
     except Exception as e:
         # 捕获并返回异常信息
