@@ -1,22 +1,28 @@
-# created by virtualenv automatically
-*
-# 忽略虚拟环境
-venv/
-bin/
-lib/
-pyvenv.cfg
-.Python
+# Ignore test folder
+test/
 
-# 忽略 Python 缓存文件
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 
-# 忽略环境变量文件
+# Environments
 .env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# 忽略 IDE 配置文件
-.idea/
+# IDE
 .vscode/
+.idea/
 
-# 忽略系统文件
+# Logs
+*.log
+logs/
+
+# System
 .DS_Store
+Thumbs.db

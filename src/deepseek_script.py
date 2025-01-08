@@ -1,5 +1,6 @@
 import sys
 import json
+import logging
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
@@ -88,42 +89,82 @@ follow_problem_gen = """
                  </new_problem>
 """
 
-
-
-
 # 加载环境变量
-load_dotenv()
-print(f"Current working directory: {os.getcwd()}")  # 添加调试日志
-print(f"Environment variables: {os.environ}")  # 添加调试日志
+try:
+    if not load_dotenv():
+        raise EnvironmentError("Failed to load .env file")
+    
+    # 初始化日志
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.debug(f"Environment variables: {os.environ}")
 
-# 初始化 DeepSeek 客户端
-deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-print(f"DeepSeek API key: {deepseek_api_key}")  # 添加调试日志
-client = OpenAI(api_key=deepseek_api_key, base_url="https://api.deepseek.com")
+    # 获取API密钥
+    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not deepseek_api_key:
+        raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+    
+    logger.info("Initializing DeepSeek client")
+    client = OpenAI(
+        api_key=deepseek_api_key,
+        base_url="https://api.deepseek.com",
+        max_retries=3,
+        timeout=30
+    )
+except Exception as e:
+    logger.error(f"Initialization failed: {str(e)}")
+    sys.exit(1)
 
 def call_deepseek_api(messages):
-    # 将messages转换为字符串
-    if isinstance(messages, list):
-        messages = " ".join(messages)
-    
-    # 调用 DeepSeek API
-    response = client.chat.completions.create(
-        model="deepseek-chat",
-        messages= [
-            {"role": "system", "content": f"""
-                {role_sys}。
-                {scope_def}。
-                {style_req}。
-                {format_req}。
-                {lenght_control}。
-            """}, 
-            {"role": "user", "content": messages},
-        ],
-        stream=False,
-        temperature=0
-    )
-    # 返回 DeepSeek 的回复
-    return response.choices[0].message.content
+    """调用DeepSeek API并返回结果"""
+    try:
+        # 验证输入参数
+        if not messages:
+            raise ValueError("Messages cannot be empty")
+            
+        if isinstance(messages, list):
+            messages = " ".join(messages)
+            
+        logger.info("Calling DeepSeek API")
+        
+        # 调用 DeepSeek API
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": f"""
+                    {role_sys}。
+                    {scope_def}。
+                    {style_req}。
+                    {format_req}。
+                    {lenght_control}。
+                """}, 
+                {"role": "user", "content": messages},
+            ],
+            stream=False,
+            temperature=0
+        )
+        
+        if not response.choices:
+            raise ValueError("No response from DeepSeek API")
+            
+        logger.info("Successfully received response from DeepSeek API")
+        return {
+            'id': response.id,
+            'object': response.object,
+            'created': response.created,
+            'model': response.model,
+            'choices': [choice.dict() for choice in response.choices],
+            'usage': response.usage.dict()
+        }
+        
+    except Exception as e:
+        logger.error(f"API call failed: {str(e)}")
+        return f"API call failed: {str(e)}"
 
 if __name__ == '__main__':
     # 从命令行参数中获取 messages 数据

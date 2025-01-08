@@ -43,12 +43,22 @@ def run_python():
         if result.returncode != 0:
             return jsonify({'error': result.stderr}), 500
 
-        # 直接返回脚本的输出
-        return jsonify({'output': result.stdout})
+        # 尝试解析脚本输出为JSON
+        try:
+            output = json.loads(result.stdout)
+            return jsonify(output)
+        except json.JSONDecodeError:
+            # 如果解析失败，返回原始输出
+            return jsonify({'output': result.stdout})
 
     except Exception as e:
         # 捕获并返回异常信息
-        return jsonify({'error': str(e)}), 500
+        error_msg = str(e)
+        print(f"Error occurred: {error_msg}")  # 添加错误日志
+        return jsonify({
+            'error': error_msg,
+            'type': type(e).__name__
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
