@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import subprocess
 import json
 import os
+import sys
 
 app = Flask(__name__)
 
@@ -27,8 +28,9 @@ def run_python():
         script_path = os.path.join(current_dir, 'deepseek_script.py')
 
         # 调用 deepseek_script.py，并将 messages 数据传递给它
+        # 使用当前Python解释器路径
         result = subprocess.run(
-            ['python3', script_path, json.dumps(data['messages'])],
+            [sys.executable, script_path, json.dumps(data['messages'])],
             capture_output=True, text=True,
             env=os.environ  # 传递当前环境变量
         )
