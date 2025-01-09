@@ -1,10 +1,14 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # 导入 CORS
 import subprocess
 import json
 import os
 import sys
 
 app = Flask(__name__)
+
+# 启用 CORS，允许所有域名访问
+CORS(app)
 
 @app.route('/')
 def index():
