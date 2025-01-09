@@ -26,3 +26,5 @@ logs/
 # System
 .DS_Store
 Thumbs.db
+
+readme.txt
