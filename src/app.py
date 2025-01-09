@@ -1,13 +1,16 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # 导入 CORS
 import json
 import os
 from deepseek_script import call_deepseek_api
 
 app = Flask(__name__)
 
-# 启用 CORS，允许所有域名访问
-CORS(app)
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
 
 @app.route('/')
 def index():
