@@ -120,8 +120,12 @@ except Exception as e:
     logger.error(f"Initialization failed: {str(e)}")
     sys.exit(1)
 
-def call_deepseek_api(messages):
-    """调用DeepSeek API并返回结果"""
+def call_deepseek_api(messages, timeout=30):
+    """调用DeepSeek API并返回结果
+    Args:
+        messages: 要发送的消息列表
+        timeout: API调用超时时间，默认30秒
+    """
     try:
         # 验证输入参数
         if not messages:
@@ -129,6 +133,8 @@ def call_deepseek_api(messages):
             
         if isinstance(messages, list):
             messages = " ".join(messages)
+            
+        logger.info(f"Calling DeepSeek API with timeout={timeout}s")
             
         logger.info("Calling DeepSeek API")
         
@@ -146,7 +152,8 @@ def call_deepseek_api(messages):
                 {"role": "user", "content": messages},
             ],
             stream=False,
-            temperature=0
+            temperature=0,
+            timeout=timeout
         )
         
         if not response.choices:
