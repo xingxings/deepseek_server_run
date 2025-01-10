@@ -4,16 +4,33 @@ import json
 import os
 import time
 import datetime
+import psutil
+import gc
 from deepseek_script import call_deepseek_api
+
+def log_memory_usage():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    print(f"Memory usage: RSS={mem_info.rss/1024/1024:.2f}MB VMS={mem_info.vms/1024/1024:.2f}MB")
 
 app = Flask(__name__)
 CORS(app, resources={
     r"/run_python": {
         "origins": ["http://47.93.160.85"],
         "methods": ["POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": True,
+        "max_age": 86400
     }
 })
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', 'http://47.93.160.85')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 @app.route('/')
 def index():
