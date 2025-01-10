@@ -1,11 +1,13 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_cors import CORS
 import json
 import os
 import time
 from deepseek_script import call_deepseek_api
 
 app = Flask(__name__)
+CORS(app, resources={r"/run-python": {"origins": "http://47.93.160.85"}})
 CORS(app, resources={
     r"/run-python": {
         "origins": ["http://47.93.160.85"],
