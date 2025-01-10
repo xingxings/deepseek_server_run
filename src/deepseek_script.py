@@ -1,9 +1,12 @@
 import sys
 import json
 import logging
+import tracemalloc
+import gc
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+import psutil
 
 
 role_sys = "你是一个富有耐心，和蔼可亲的高中数学老师，任务是回答学生提出的数学问题。"
@@ -95,11 +98,22 @@ try:
         raise EnvironmentError("Failed to load .env file")
     
     # 初始化日志
+    # 初始化内存跟踪
+    tracemalloc.start()
+    
+    # 配置日志
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
+        level=logging.WARNING,  # 降低日志级别
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('deepseek.log'),
+            logging.StreamHandler()
+        ]
     )
     logger = logging.getLogger(__name__)
+    
+    # 设置内存监控
+    process = psutil.Process(os.getpid())
     
     logger.info(f"Current working directory: {os.getcwd()}")
     logger.debug(f"Environment variables: {os.environ}")
@@ -126,52 +140,86 @@ def call_deepseek_api(messages, timeout=30):
         messages: 要发送的消息列表
         timeout: API调用超时时间，默认30秒
     """
-    try:
-        # 验证输入参数
-        if not messages:
-            raise ValueError("Messages cannot be empty")
+    # 内存监控
+    mem_before = process.memory_info().rss
+    snapshot1 = tracemalloc.take_snapshot()
+    max_retries = 3
+    retry_delay = 5  # 初始延迟5秒
+    max_delay = 30  # 最大延迟30秒
+
+    for attempt in range(max_retries):
+        try:
+            # 验证输入参数
+            if not messages:
+                raise ValueError("Messages cannot be empty")
+                
+            if isinstance(messages, list):
+                messages = " ".join(messages)
+                
+            logger.info(f"Calling DeepSeek API with timeout={timeout}s (attempt {attempt + 1})")
             
-        if isinstance(messages, list):
-            messages = " ".join(messages)
+            # 调用 DeepSeek API
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": f"""
+                        {role_sys}。
+                        {scope_def}。
+                        {style_req}。
+                        {format_req}。
+                        {lenght_control}。
+                    """}, 
+                    {"role": "user", "content": messages},
+                ],
+                stream=False,
+                temperature=0,
+                timeout=timeout
+            )
             
-        logger.info(f"Calling DeepSeek API with timeout={timeout}s")
+            if not response.choices:
+                raise ValueError("No response from DeepSeek API")
+                
+            logger.info("Successfully received response from DeepSeek API")
+            result = {
+                'id': response.id,
+                'object': response.object,
+                'created': response.created,
+                'model': response.model,
+                'choices': [{
+                    'message': {
+                        'content': choice.message.content
+                    }
+                } for choice in response.choices],
+                'usage': response.usage.dict()
+            }
             
-        logger.info("Calling DeepSeek API")
-        
-        # 调用 DeepSeek API
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": f"""
-                    {role_sys}。
-                    {scope_def}。
-                    {style_req}。
-                    {format_req}。
-                    {lenght_control}。
-                """}, 
-                {"role": "user", "content": messages},
-            ],
-            stream=False,
-            temperature=0,
-            timeout=timeout
-        )
-        
-        if not response.choices:
-            raise ValueError("No response from DeepSeek API")
+            # 内存监控和清理
+            mem_after = process.memory_info().rss
+            snapshot2 = tracemalloc.take_snapshot()
             
-        logger.info("Successfully received response from DeepSeek API")
-        return {
-            'id': response.id,
-            'object': response.object,
-            'created': response.created,
-            'model': response.model,
-            'choices': [choice.dict() for choice in response.choices],
-            'usage': response.usage.dict()
-        }
-        
-    except Exception as e:
-        logger.error(f"API call failed: {str(e)}")
-        return f"API call failed: {str(e)}"
+            # 记录内存使用情况
+            logger.warning(f"Memory usage: {mem_after - mem_before} bytes")
+            
+            # 显示内存分配差异
+            top_stats = snapshot2.compare_to(snapshot1, 'lineno')
+            for stat in top_stats[:5]:
+                logger.warning(stat)
+            
+            # 显式清理
+            del response
+            gc.collect()
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"API call failed (attempt {attempt + 1}): {str(e)}")
+            if attempt < max_retries - 1:
+                delay = min(retry_delay * (2 ** attempt), max_delay)
+                logger.info(f"Waiting {delay} seconds before retry...")
+                time.sleep(delay)
+                continue
+                
+            raise Exception(f"All attempts failed: {str(e)}")
 
 if __name__ == '__main__':
     # 从命令行参数中获取 messages 数据
