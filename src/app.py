@@ -14,13 +14,7 @@ def log_memory_usage():
     print(f"Memory usage: RSS={mem_info.rss/1024/1024:.2f}MB VMS={mem_info.vms/1024/1024:.2f}MB")
 
 app = Flask(__name__)
-CORS(app, resources={
-    r"/run_python": {
-        "origins": "http://47.93.160.85",
-        "methods": ["POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
-    }
-})
+CORS(app)
 
 @app.route('/')
 def index():
