@@ -20,15 +20,11 @@ CORS(app)
 def index():
     return "Welcome to DeepSeek Server!"
 
-@app.route('/run_python', methods=['POST', 'OPTIONS'])
+@app.route('/run_python/', methods=['POST', 'OPTIONS'])
 def run_python():
     if request.method == 'OPTIONS':
-        # 处理预检请求
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Origin', 'http://47.93.160.85')
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return response
+        # 让Flask-CORS处理预检请求
+        return jsonify({'status': 'ok'}), 200
 
     # 获取并验证请求数据
     data = request.json
