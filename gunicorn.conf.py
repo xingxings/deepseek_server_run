@@ -22,3 +22,6 @@ preload_app = True
 
 # 优雅重启
 graceful_timeout = 30
+
+# 重新加载
+reload = True

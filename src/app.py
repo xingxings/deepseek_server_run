@@ -14,7 +14,13 @@ def log_memory_usage():
     print(f"Memory usage: RSS={mem_info.rss/1024/1024:.2f}MB VMS={mem_info.vms/1024/1024:.2f}MB")
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={
+    r"/run_python/": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 @app.route('/')
 def index():
@@ -36,6 +42,7 @@ def run_python():
                 'timestamp': datetime.datetime.utcnow().isoformat() + 'Z'
             }
         }), 400
+    
 
     # 提取用户消息
     user_messages = [msg['text'] for msg in data['messages'] if msg['sender'] == 'user']
@@ -50,7 +57,7 @@ def run_python():
 
     try:
         # 调用DeepSeek API
-        result = call_deepseek_api(user_messages)
+        result = call_deepseek_api(data)
         
         # 构造响应
         return jsonify({

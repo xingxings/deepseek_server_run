@@ -7,6 +7,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import psutil
+import time
 
 
 role_sys = "你是一个富有耐心，和蔼可亲的高中数学老师，任务是回答学生提出的数学问题。"
@@ -63,34 +64,147 @@ format_req = """
             推荐：$1+2+3+...+n$。
 """
 
-lenght_control = "请在2000 字内回答问题，若回答超过 2000 字，请重新回答"
+length_control = "请在2000 字内回答问题，若回答超过 2000 字，请重新回答"
 
-summary_gen = """
-            请根据学生提出的问题和得到的回答，写出知识点总结，要求：
-                1. 对每个步骤的知识点进行总结，包括基于什么信号想到的，起到了什么作用
-                2. 列举知识点的常见的使用情景，并举出简单的例子；
-                3. 生成的内容以下面的结构展示：
-                    <summary>
-                        <step>
-                            <name></name>
-                            <knowledge></knowledge>
-                            <func></func>
-                            <sample></sample>
-                        </step>
-                    </summary>
-"""
 
-follow_problem_gen = """
-           请根据学生提出的问题，生成一个相似的新问题，要求：
-              1. 新问题和学生所问的问题类似，只是数值或者条件有所改变； 
-              2. 新问题必须具备合理性，不可以出现无解的情况；
-              3. 数值设计要合理；
-              4. 检查答案中是否有复杂的计算或超出范围要求的数学表示，如果有，请重新生成问题；
-              5. 生成的新问题以如下结构展示：
-                 <new_problem>
-                    新问题
-                 </new_problem>
-"""
+def sug_tip():
+    sug_prompt = """
+    如果学生需要一些提示，请给出提示，要求如下：
+        1. 只生成一步提示，不要一次性给出很多提示，并且告知学生，如果需要更多提示，请继续提问；
+        2. 如果之前给出过提示，请结合之前的提示，给出新的提示，避免给出重复的提示，这样对学生没有意义；
+        3. 如果提示的信息已经足够解决问题，请告知学生，信息已经足够，请结合提示信息，耐心思考，可以得到正确答案。
+        3. 提示过程中，一定一定不能直接给出题目的答案，这样会给学生作弊提供空间，
+        4. 请评估本次提示在解决这个问题中的作用，以百分数来计量，输出的格式为：
+            <deductedScore>百分数</deductedScore>
+            标签前面请不要添加关于评估作用的描述；
+    """
+    return sug_prompt
+
+
+def sug_thought():
+    sug_prompt = """
+        如果学生需要大概的思路，请结合学生所做的题目，给出大概思路。要求如下：
+            1. 给出大致思路，不用给出太多的细节，和题目的详解要去别开；
+            2. 思路的描述要清晰，必要时请给出相关的知识点；
+            3. 一定一定不要直接给出答案，这样会给学生作弊提供空间；
+            4. 如果之前有给出过提示，请结合之前的提示，给出合理的思路信息，避免让学生感觉没有价值；
+            5. 请评估大概思路的提示在解决这个问题中的作用，以百分数来计量，输出的格式为：
+                <deductedScore>百分数</deductedScore>
+                标签前面请不要添加关于评估作用的描述；
+    """
+    return sug_prompt
+
+def sug_solution():
+    sug_prompt = """
+        如果学生想知道这道题的解题思路和步骤，请给予步骤化的回答，要求：
+            1. 步骤清晰，解释清楚。
+            2. 每一步依据这样的结构进行回答：依据什么信息，执行什么动作，得到什么结果，
+            3. 计算、整理、化简等数学过程，一定要非常的详细，不要跳步，以免让学生不理解。
+            4. 评估详细的解题步骤在解决这个问题中的作用，以百分数来计量，输出的格式为：
+                <deductedScore>百分数</deductedScore>
+                标签前面请不要添加关于评估作用的描述；
+    """
+    return sug_prompt
+
+def sug_misconception():
+    sug_prompt = """
+        如果学生想知道自己的思路是否正确，要求指出错误思路，请结合学生回答的正误情况、题目本身、错误选项和正确选项给予回答，要求：
+            1. 对每个选项进行详细的分析，说明正确或错误的原因；
+            2. 猜测学生可能的错误思路，并给与分析；
+            3. 措辞更为温和一下，并在最后给学生以肯定和鼓励
+    """
+    return sug_prompt
+
+def sug_summary():
+    sug_prompt = """
+        如果学生问及题目涉及到哪些数学知识点，请写出知识点总结，要求如下：
+            1. 对每个步骤的知识点进行总结，包括基于什么信号想到的，起到了什么作用；
+            2. 在每一步中，列举知识点的常见的使用情景，并举出简单的例子；
+            3. 如果之前有生成类似题目，请将原题目和生成的新问题一起进行分析；
+            4. 最后给于学生以鼓励和肯定；
+    """
+    return sug_prompt
+
+def sug_analogue():
+    sug_prompt = """
+        如果学生想要得到一道和题目类似的新题目，请生成一个相似的新问题，要求：
+            1. 新问题和学生所问的问题类似，只是数值或者条件有所改变； 
+            2. 新问题必须具备合理性，不可以出现无解的情况；
+            3. 数值设计要合理，让学生在解答过程不需要复杂的计算，不能超出知识范围；
+            4. 鼓励学生独立的去尝试解决这个问题；
+    """
+    return sug_prompt
+
+
+func_call = [
+    {
+        "type": "function", 
+        "function": {
+            "name": "sug_tip",
+            "description": "当学生问及提示相关的问题时，请调用这个函数",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            },
+        }
+    },
+    {
+        "type": "function", 
+        "function": {
+            "name": "sug_thought",
+            "description": "当学生问及提示思路方面的问题时，能更好的帮助回答相关的问题",
+            "parameters": {
+                "type": "object",
+                "properties": {} 
+            },
+        }
+    },
+    {
+        "type": "function", 
+        "function": {
+            "name": "sug_solution",
+            "description": "当学生问及提示解题步骤和详细答案方面的问题时，能更好的帮助回答相关的问题",
+            "parameters": {
+                "type": "object",
+                "properties": {} 
+            },
+        }
+    },
+    {
+        "type": "function", 
+        "function": {
+            "name": "sug_misconception",
+            "description": "当学生问及涉及错误方面的问题时，能更好的帮助回答相关的问题",
+            "parameters": {
+                "type": "object",
+                "properties": {} 
+            },
+        }
+    },
+    {
+        "type": "function", 
+        "function": {
+            "name": "sug_summary",
+            "description": "当学生问及总结知识点方面的问题时，能更好的帮助回答相关的问题",
+            "parameters": {
+                "type": "object",
+                "properties": {} 
+            },
+        }
+    },
+    {
+        "type": "function", 
+        "function": {
+            "name": "sug_analogue",
+            "description": "当学生想要类似的新题目时，能更好的帮助回答相关的问题",
+            "parameters": {
+                "type": "object",
+                "properties": {} 
+            },
+        }
+    }
+]
+
 
 # 加载环境变量
 try:
@@ -128,53 +242,94 @@ try:
         api_key=deepseek_api_key,
         base_url="https://api.deepseek.com",
         max_retries=3,
-        timeout=30
+        timeout=45
     )
 except Exception as e:
     logger.error(f"Initialization failed: {str(e)}")
     sys.exit(1)
 
-def call_deepseek_api(messages, timeout=30):
+def call_deepseek_api(data, timeout=45):
     """调用DeepSeek API并返回结果
     Args:
-        messages: 要发送的消息列表
-        timeout: API调用超时时间，默认30秒
+        data: 要发送的消息列表
+        timeout: API调用超时时间，默认45秒
     """
     # 内存监控
     mem_before = process.memory_info().rss
     snapshot1 = tracemalloc.take_snapshot()
     max_retries = 3
     retry_delay = 5  # 初始延迟5秒
-    max_delay = 30  # 最大延迟30秒
+    max_delay = 45  # 最大延迟30秒
 
     for attempt in range(max_retries):
         try:
             # 验证输入参数
-            if not messages:
-                raise ValueError("Messages cannot be empty")
+            if not data:
+                raise ValueError("Data cannot be empty")
+            
+            # 题目信息
+            problems_info = f"""
+                学生当前所做的题目是：{data['context']['problem']['content']}。
+                题目的正确选项是： {', '.join(map(str, data['context']['problem']['right_results']))}。
+                题目的错误选项是：{', '.join(map(str, data['context']['problem']['wrong_results']))}。
+                学生的答题结果是：{'正确的' if data['context']['isCorrect'] else '错误的'}。
+                题目的答案解析是：{'。'.join(map(lambda item: f'{item["content"]}。{item["content"]}', data['context']['problem']['solution']))}。
+            """
+
+            # system prompt
+            system_role = {"role": "system", "content": f"""
+                {role_sys}。
+                {scope_def}。
+                {style_req}。
+                {format_req}。
+                {length_control}。
+                {problems_info}。
+            """}
                 
-            if isinstance(messages, list):
-                messages = " ".join(messages)
+            # 处理 data 中的 messages
+            all_roles = []
+
+            all_roles.append(system_role)
+
+            for message in data['messages']:
+                if message['sender'] == 'user':
+                    role = {
+                        "role": "user", "content": message['text']
+                    }
+                    all_roles.append(role)
+
+                if message['sender'] == 'ai':
+                    role = {
+                        "role": "assistant", "content": message['text']
+                    }
+                    all_roles.append(role)
                 
             logger.info(f"Calling DeepSeek API with timeout={timeout}s (attempt {attempt + 1})")
-            
+
             # 调用 DeepSeek API
             response = client.chat.completions.create(
                 model="deepseek-chat",
-                messages=[
-                    {"role": "system", "content": f"""
-                        {role_sys}。
-                        {scope_def}。
-                        {style_req}。
-                        {format_req}。
-                        {lenght_control}。
-                    """}, 
-                    {"role": "user", "content": messages},
-                ],
+                messages= all_roles,
+                tools=func_call,
                 stream=False,
                 temperature=0,
                 timeout=timeout
             )
+
+            if response.choices[0].finish_reason == 'tool_calls':
+                called_func = globals()[response.choices[0].message.tool_calls[0].function.name]
+                sug_prompt = called_func()
+                for item in all_roles:
+                    if item['role'] == 'system':
+                        item['content'] += sug_prompt
+
+                response = client.chat.completions.create(
+                    model="deepseek-chat",
+                    messages = all_roles,
+                    temperature=0,
+                    stream=False,
+                    timeout=timeout
+                )
             
             if not response.choices:
                 raise ValueError("No response from DeepSeek API")
@@ -234,7 +389,7 @@ if __name__ == '__main__':
         raise ValueError("Invalid input format: expected a list or a dictionary with 'messages' key")
     
     # 调用 DeepSeek API
-    result = call_deepseek_api(messages)
+    result = call_deepseek_api(input_data)
     
     # 输出结果（JSON 格式）
-    print(json.dumps(result))
+    # print(json.dumps(result))
